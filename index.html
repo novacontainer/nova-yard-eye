@@ -85,7 +85,7 @@ label.f{display:block;font-size:13px;color:var(--muted);margin:10px 0 4px}
 <body>
 <div class="hdr">
   <div class="lg"><img id="logo" alt="NOVA"></div>
-  <div><div class="cap">NOVA CONTAINER<span class="yard"> · ลานตู้ BCDS</span></div><div class="t">NOVA Yard Eye<span class="ver">v1.0</span></div></div>
+  <div><div class="cap">NOVA CONTAINER<span class="yard"> · ลานตู้ BCDS</span></div><div class="t">NOVA Yard Eye<span class="ver">v1.1</span></div></div>
   <div class="sp"></div>
   <span class="pill" id="modePill">แปลนลาน</span>
   <button class="sw" id="btnSwitch" title="สลับโหมด">⇄</button>
@@ -237,10 +237,20 @@ function renderHome(app){
 }
 
 /* ===================== upload queue ===================== */
+// คิวอัปโหลด: ส่งพร้อมกันไม่เกิน 2 รูป และลองซ้ำอัตโนมัติ 2 ครั้งถ้าเซิร์ฟเวอร์ตอบผิดพลาด (กัน 404/หลุดตอนยิงหลายรูปพร้อมกัน)
+var UPQ={running:0,max:2,queue:[]};
 function queuePhoto(photo, path, meta){
-  photo.status='up';
-  gs('uploadPhoto',{b64:photo.b64wm,name:photo.name,path:path,meta:meta}).then(function(r){ photo.serverId=r.id; photo.uploaded=true; if(photo.status==='up') photo.status='ok'; renderSessionSoft(); })
-   .catch(function(e){ photo.status='err'; photo.err='อัปโหลดไม่สำเร็จ: '+(e.message||e); renderSessionSoft(); });
+  photo.status='up'; photo.tries=photo.tries||0;
+  UPQ.queue.push({photo:photo,path:path,meta:meta}); pumpUploads();
+}
+function pumpUploads(){
+  while(UPQ.running<UPQ.max && UPQ.queue.length){ var job=UPQ.queue.shift(); UPQ.running++; doUpload(job); }
+}
+function doUpload(job){
+  var photo=job.photo;
+  gs('uploadPhoto',{b64:photo.b64wm,name:photo.name,path:job.path,meta:job.meta}).then(function(r){ photo.serverId=r.id; photo.uploaded=true; if(photo.status==='up') photo.status='ok'; })
+   .catch(function(e){ photo.tries++; if(photo.tries<3){ setTimeout(function(){ UPQ.queue.push(job); pumpUploads(); },1500*photo.tries); } else { photo.status='err'; photo.err='อัปโหลดไม่สำเร็จ: '+(e.message||e); } })
+   .then(function(){ UPQ.running--; renderSessionSoft(); pumpUploads(); });
 }
 function ocrPhoto(photo){
   photo.ocr='pending';
@@ -547,7 +557,7 @@ async function adminSettings(body){
   body.innerHTML='<div class="card"><h2>การอ่านเบอร์ตู้ (Gemini)</h2>'+
     '<label class="f">Gemini API key '+(s.hasKey?'<span class="tag g">ตั้งแล้ว '+h(s.geminiKeyMasked)+'</span>':'<span class="tag r">ยังไม่ตั้ง</span>')+'</label><input id="key" placeholder="วาง API key ใหม่ที่นี่ (เว้นว่างถ้าไม่เปลี่ยน)" autocomplete="off">'+
     '<div class="hint">สร้างฟรีที่ Google AI Studio → Get API key · key จะถูกเก็บฝั่งเซิร์ฟเวอร์ ไม่ส่งไปมือถือ</div>'+
-    '<label class="f">โมเดล</label><input id="model" value="'+h(s.model)+'"><div class="hint">ค่าแนะนำ gemini-2.5-flash (ถ้าไม่มี ลอง gemini-2.0-flash)</div></div>'+
+    '<label class="f">โมเดล</label><input id="model" value="'+h(s.model)+'"><div class="hint">ค่าแนะนำ gemini-3.6-flash (ถ้าใช้ไม่ได้ ดูชื่อรุ่นล่าสุดที่ ai.google.dev)</div></div>'+
     '<div class="card"><h2>รูปและลายน้ำ</h2><div class="row"><div><label class="f">ตำแหน่งลายน้ำ</label><select id="wm">'+[['bl','ล่างซ้าย'],['br','ล่างขวา'],['tl','บนซ้าย'],['tr','บนขวา']].map(function(o){return '<option value="'+o[0]+'"'+(s.wmPos===o[0]?' selected':'')+'>'+o[1]+'</option>';}).join('')+'</select></div>'+
     '<div><label class="f">ด้านยาวของรูป (px)</label><input id="maxPx" type="number" value="'+s.maxPx+'"></div><div><label class="f">คุณภาพ JPEG (0.5–0.95)</label><input id="jpegQ" type="number" step="0.01" value="'+s.jpegQ+'"></div></div></div>'+
     '<div class="card"><h2>กติกา</h2><div class="row"><div><label class="f">ตู้สูงสุดต่อแถว</label><input id="maxPerRow" type="number" value="'+s.maxPerRow+'"></div><div><label class="f">ถ่ายซ้ำเกินกี่วัน = โฟลเดอร์ใหม่</label><input id="roundDays" type="number" value="'+s.roundDays+'"></div><div><label class="f">เก็บรูปแปลนลาน (วัน)</label><input id="retentionDays" type="number" value="'+s.retentionDays+'"></div></div>'+
