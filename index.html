@@ -85,7 +85,7 @@ label.f{display:block;font-size:13px;color:var(--muted);margin:10px 0 4px}
 <body>
 <div class="hdr">
   <div class="lg"><img id="logo" alt="NOVA"></div>
-  <div><div class="cap">NOVA CONTAINER<span class="yard"> · ลานตู้ BCDS</span></div><div class="t">NOVA Yard Eye<span class="ver">v1.1</span></div></div>
+  <div><div class="cap">NOVA CONTAINER<span class="yard"> · ลานตู้ BCDS</span></div><div class="t">NOVA Yard Eye<span class="ver">v1.2</span></div></div>
   <div class="sp"></div>
   <span class="pill" id="modePill">แปลนลาน</span>
   <button class="sw" id="btnSwitch" title="สลับโหมด">⇄</button>
@@ -111,9 +111,15 @@ function gs(fn){ // เรียกฟังก์ชันฝั่งเซิ
       r[fn].apply(r,args);
     });
   }
-  return fetch(API_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({fn:fn,args:args})})
-    .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
-    .then(function(j){ if(!j||!j.ok) throw new Error((j&&j.error)||'server error'); return j.result; });
+  // ยิง HTTP: ถ้าเน็ตสะดุด/เซิร์ฟเวอร์ตอบ 5xx จะลองซ้ำเองสูงสุด 3 ครั้ง (ยกเว้น uploadPhoto ซึ่งมีคิวลองซ้ำอยู่แล้ว)
+  var body=JSON.stringify({fn:fn,args:args}); var maxTry=(fn==='uploadPhoto')?1:3;
+  function once(n){
+    return fetch(API_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:body})
+      .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+      .then(function(j){ if(!j||!j.ok) throw new Error((j&&j.error)||'server error'); return j.result; })
+      .catch(function(e){ var m=String(e.message||e); var retry=/Failed to fetch|NetworkError|Load failed|HTTP 5\d\d|HTTP 404|Unexpected token|JSON/.test(m); if(retry && n<maxTry) return new Promise(function(res){ setTimeout(res,1500*n); }).then(function(){ return once(n+1); }); throw e; });
+  }
+  return once(1);
 }
 var toastT;
 function toast(msg,ms){ var t=document.getElementById('toast'); t.textContent=msg; t.hidden=false; clearTimeout(toastT); toastT=setTimeout(function(){t.hidden=true;},ms||2200); }
